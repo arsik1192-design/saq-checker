@@ -1,4 +1,3 @@
-[README-github.md](https://github.com/user-attachments/files/34545743/README-github.md)
 # SAQ Checker
 
 Программа проверки компьютера на следы читов для серверов **SAQ.CS.KZ**.
