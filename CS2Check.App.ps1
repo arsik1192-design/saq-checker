@@ -7,7 +7,7 @@
 # ============================================================================
 
 # Куда отправлять отчёт. Пусто = кнопки отправки не будет, игрок шлёт файл руками.
-$ServerUrl = 'https://checker-saq-e8eb.up.railway.app/receive.php'
+$ServerUrl = ''
 
 # Название вашего проекта в шапке окна.
 $ProjectName = 'SAQ.CS.KZ'
@@ -424,6 +424,27 @@ $ui.StartBtn.Add_Click({
         return
     }
 
+    # Код сверяем с панелью ДО сканирования: иначе игрок ждёт три минуты
+    # и только в конце узнаёт, что код не тот.
+    if ($ServerUrl -and $token) {
+        $ui.ConsentHint.Text = 'Проверяем код...'
+        $win.Dispatcher.Invoke([System.Windows.Threading.DispatcherPriority]::Background,
+                               [System.Action]{})
+        $verifyUrl = $ServerUrl -replace 'receive\.php$', 'verify.php'
+        try {
+            $vr = Invoke-RestMethod -TimeoutSec 15 -Uri (
+                $verifyUrl + '?token=' + [uri]::EscapeDataString($token))
+            if (-not $vr.ok) {
+                $ui.ConsentHint.Text = $vr.error
+                return
+            }
+        } catch {
+            # Панель недоступна - не блокируем проверку из-за сети.
+            # Код всё равно будет проверен при отправке отчёта.
+        }
+        $ui.ConsentHint.Text = ''
+    }
+
     Show-Panel 'ProgressPanel'
     $script:Started = Get-Date
 
@@ -485,5 +506,28 @@ $win.Add_Closing({
     }
     $script:timer.Stop()
 })
+
+# Прав администратора нет - показываем понятный экран вместо формы согласия.
+# Раньше START.bat повышал права сам, но приём "Start-Process -Verb RunAs"
+# сильно нервирует антивирусы, поэтому теперь просим об этом игрока явно.
+$amAdmin = $false
+try {
+    $wi = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $amAdmin = (New-Object Security.Principal.WindowsPrincipal($wi)).IsInRole(
+        [Security.Principal.WindowsBuiltInRole]::Administrator)
+} catch {}
+
+if (-not $amAdmin) {
+    Show-Panel 'ResultPanel'
+    $ui.ResultTitle.Text     = 'Нужны права администратора'
+    $ui.SendBtn.Visibility   = 'Collapsed'
+    $ui.OpenBtn.Visibility   = 'Collapsed'
+    $ui.FolderBtn.Visibility = 'Collapsed'
+    Add-FindingCard 'High' 'Запуск' 'Закройте окно и запустите заново' `
+        ('Нажмите на файл START.bat правой кнопкой мыши и выберите ' +
+         '"Запуск от имени администратора". Без этих прав недоступны журналы ' +
+         'запуска программ, список драйверов, журнал диска и библиотеки внутри ' +
+         'игры - то есть почти всё, что проверяется.')
+}
 
 [void]$win.ShowDialog()
